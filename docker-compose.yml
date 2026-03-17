@@ -1,0 +1,12 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    ports:
+      - "0.0.0.0:5678:5678"
+    environment:
+      - N8N_EDITOR_BASE_URL=http://localhost:5678
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
