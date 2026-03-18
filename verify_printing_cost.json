@@ -26,7 +26,7 @@
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.5,
       "position": [
-        0,
+        -176,
         0
       ],
       "id": "5561a48e-5c19-4266-891a-96e9dbe4df2a",
@@ -36,45 +36,13 @@
     },
     {
       "parameters": {
-        "jsCode": "// n8n Code node — runs Mode: \"Run Once for All Items\"\n// Reads CSV output directly from previous SSH nodes stdout\n\nconst COMPARE_COL = 'unit_cost_1';\nconst ID_COLS = ['product_id_1', 'product_name_1', 'mailing_method_name', 'day', 'min_quantity'];\n\n// ── Read CSV content from SSH node stdout ──────────────────────────────────\nconst csv1 = $('qa2').first().json.stdout;\nconst csv2 = $('qa5').first().json.stdout;\nconst ENV1 = 'QA2';\nconst ENV2 = 'QA5';\n\n// ── Parse CSV string → array of objects ───────────────────────────────────\nfunction parseCSV(content) {\n  const clean = content.replace(/^\\uFEFF/, '').trim();\n  const lines = clean.split('\\n').filter(l => l.trim());\n  const headers = lines[0].split(',').map(h => h.trim());\n  return lines.slice(1).map(line => {\n    const vals = line.split(',');\n    return Object.fromEntries(headers.map((h, i) => [h, (vals[i] || '').trim()]));\n  });\n}\n\nfunction rowKey(row) {\n  return ID_COLS.map(c => row[c] || '').join('|');\n}\n\nconst rows1 = parseCSV(csv1);\nconst rows2 = parseCSV(csv2);\n\nconst map1 = Object.fromEntries(rows1.map(r => [rowKey(r), r]));\nconst map2 = Object.fromEntries(rows2.map(r => [rowKey(r), r]));\nconst allKeys = [...new Set([...Object.keys(map1), ...Object.keys(map2)])];\n\nconst diffs = [];\nconst only1 = [];\nconst only2 = [];\n\nfor (const key of allKeys) {\n  const r1 = map1[key];\n  const r2 = map2[key];\n  if (r1 && !r2) { only1.push(r1); continue; }\n  if (r2 && !r1) { only2.push(r2); continue; }\n  const v1 = r1[COMPARE_COL] || '';\n  const v2 = r2[COMPARE_COL] || '';\n  if (v1 !== v2) {\n    const n1 = parseFloat(v1), n2 = parseFloat(v2);\n    const delta = (!isNaN(n1) && !isNaN(n2))\n      ? (() => { const d = Math.round((n2 - n1) * 10000) / 10000; return d > 0 ? `+${d}` : `${d}`; })()\n      : 'N/A';\n    diffs.push({\n      product_id:     r1.product_id_1 || '',\n      product_name:   r1.product_name_1 || '',\n      mailing_method: r1.mailing_method_name || '',\n      day:            r1.day || '',\n      min_qty:        r1.min_quantity || '',\n      val1: v1, val2: v2, delta\n    });\n  }\n}\n\n// ── Build HTML report ──────────────────────────────────────────────────────\nconst now = new Date().toLocaleString('ja-JP');\nconst diffCount = diffs.length;\nconst totalRows = allKeys.length;\n\nconst rowsHtml = diffs.length > 0\n  ? diffs.map(d => {\n      const dc = d.delta.startsWith('+') ? 'up' : 'down';\n      return `<tr>\n        <td>${d.product_id}</td>\n        <td class=\"jp\">${d.product_name}</td>\n        <td class=\"jp\">${d.mailing_method}</td>\n        <td>${d.day}</td>\n        <td>${d.min_qty}</td>\n        <td class=\"mono e1\">${d.val1}</td>\n        <td class=\"mono e2\">${d.val2}</td>\n        <td class=\"mono ${dc}\">${d.delta}</td>\n      </tr>`;\n    }).join('')\n  : '<tr><td colspan=\"8\" class=\"nodiff\">No differences in unit_cost_1 — files are identical</td></tr>';\n\nconst missingHtml = [\n  only1.length ? `<p class=\"warn\">⚠ ${only1.length} rows only in ${ENV1}</p>` : '',\n  only2.length ? `<p class=\"warn\">⚠ ${only2.length} rows only in ${ENV2}</p>` : ''\n].join('');\n\nconst statClass = diffCount > 0 ? 'red' : 'green';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"UTF-8\">\n<title>unit_cost_1 diff · ${ENV1} vs ${ENV2}</title>\n<style>\n*{box-sizing:border-box;margin:0;padding:0}\nbody{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;font-size:14px}\n.hdr{background:#1a1a1a;color:#fff;padding:1.5rem 2rem}\n.hdr h1{font-size:1.15rem;font-weight:600;margin-bottom:.2rem}\n.hdr p{font-size:.78rem;color:#888}\n.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1.25rem 2rem}\n.stat{background:#fff;border-radius:8px;padding:1rem 1.25rem;border:1px solid #e5e5e5}\n.stat .num{font-size:1.75rem;font-weight:700}\n.stat .lbl{font-size:.72rem;color:#888;margin-top:.2rem}\n.red .num{color:#dc2626}.green .num{color:#16a34a}\n.files{display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:0 2rem 1.25rem}\n.file{background:#fff;border-radius:8px;padding:.875rem 1.25rem;border:1px solid #e5e5e5;font-size:.78rem}\n.tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:.7rem;font-weight:700;margin-bottom:.3rem}\n.e1 .tag{background:#dbeafe;color:#1d4ed8}.e2 .tag{background:#dcfce7;color:#166534}\n.e1{color:#1d4ed8}.e2{color:#166534}\n.path{color:#555;word-break:break-all}\n.wrap{padding:0 2rem 2rem}\n.warn{color:#b45309;background:#fef3c7;padding:.5rem 1rem;border-radius:6px;margin-bottom:.75rem;font-size:.8rem}\n.search{margin-bottom:.875rem}\n.search input{width:100%;padding:.5rem .875rem;border:1px solid #ddd;border-radius:6px;font-size:.875rem;outline:none}\n.search input:focus{border-color:#666}\ntable{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e5e5}\nthead{background:#f9f9f9}\nth{padding:.6rem .875rem;text-align:left;font-weight:600;font-size:.72rem;color:#555;border-bottom:1px solid #e5e5e5;white-space:nowrap}\ntd{padding:.5rem .875rem;border-bottom:1px solid #f0f0f0;vertical-align:middle}\ntr:last-child td{border-bottom:none}\ntr:hover td{background:#fafafa}\n.mono{font-family:monospace;font-size:.8rem}\n.up{color:#dc2626;font-weight:600}.down{color:#16a34a;font-weight:600}\n.jp{font-size:.78rem}\n.nodiff{text-align:center;padding:2rem;color:#16a34a;font-weight:500}\n.hidden{display:none}\n</style></head><body>\n<div class=\"hdr\">\n  <h1>unit_cost_1 diff &nbsp;·&nbsp;\n    <span style=\"color:#60a5fa\">${ENV1}</span> vs\n    <span style=\"color:#4ade80\">${ENV2}</span>\n  </h1>\n  <p>Generated ${now}</p>\n</div>\n<div class=\"stats\">\n  <div class=\"stat\"><div class=\"num\">${totalRows}</div><div class=\"lbl\">Total rows</div></div>\n  <div class=\"stat ${statClass}\"><div class=\"num\">${diffCount}</div><div class=\"lbl\">Rows with diff</div></div>\n  <div class=\"stat\"><div class=\"num\">${only1.length}</div><div class=\"lbl\">Only in ${ENV1}</div></div>\n  <div class=\"stat\"><div class=\"num\">${only2.length}</div><div class=\"lbl\">Only in ${ENV2}</div></div>\n</div>\n<div class=\"files\">\n  <div class=\"file e1\"><span class=\"tag\">${ENV1}</span><div class=\"path\">debug_estimation_price_cost_qa2.csv</div></div>\n  <div class=\"file e2\"><span class=\"tag\">${ENV2}</span><div class=\"path\">debug_estimation_price_cost_qa5.csv</div></div>\n</div>\n<div class=\"wrap\">\n  ${missingHtml}\n  <div class=\"search\"><input type=\"text\" id=\"s\" placeholder=\"Filter by product, method, value...\" oninput=\"filter()\"></div>\n  <table><thead><tr>\n    <th>Product ID</th><th>Product name</th><th>Mailing method</th><th>Day</th><th>Min qty</th>\n    <th><span style=\"background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-size:.7rem\">${ENV1}</span> unit_cost_1</th>\n    <th><span style=\"background:#dcfce7;color:#166534;padding:1px 6px;border-radius:4px;font-size:.7rem\">${ENV2}</span> unit_cost_1</th>\n    <th>Delta</th>\n  </tr></thead>\n  <tbody id=\"tb\">${rowsHtml}</tbody></table>\n</div>\n<script>\nfunction filter(){const q=document.getElementById('s').value.toLowerCase();document.querySelectorAll('#tb tr').forEach(r=>r.classList.toggle('hidden',!r.textContent.toLowerCase().includes(q)));}\n</script>\n</body></html>`;\n\nreturn [{ json: { html, diff_count: diffCount, total_rows: totalRows } }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        656,
-        0
-      ],
-      "id": "c846ddf2-c2e5-4de0-afe5-dd5de1638e5c",
-      "name": "Code in JavaScript"
-    },
-    {
-      "parameters": {
-        "command": "=cat << 'HTMLEOF' > /Users/ly.hkk/Downloads/unit_cost_diff.html {{ $json.html }} HTMLEOF open /Users/ly.hkk/Downloads/unit_cost_diff.html"
+        "command": "=export PATH=\"/usr/local/bin:$PATH\" && cd /Users/ly.hkk/Desktop/Raksul/raksul-enterprise-bdd/robot && ENV={{ $('Master Data Form').item.json.env}} HEADLESS=false DEBUG_ESTIMATION_CATEGORY_ID={{ $('Master Data Form').item.json.category_id }} DEBUG_ESTIMATION_PRODUCT_IDS=\"{{ $json.product_ids }}\" ./robot.sh test_suites/directmail/ops/ops_debug_estimation_page.robot && cat /Users/ly.hkk/Downloads/debug_estimation_price_cost_qa5.csv"
       },
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        864,
-        0
-      ],
-      "id": "7ba17027-3e58-464c-a975-8c3cc70a10b8",
-      "name": "Execute a command",
-      "credentials": {
-        "sshPassword": {
-          "id": "WHMZInEBa0LWjYy4",
-          "name": "SSH Password account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "command": "=export PATH=\"/usr/local/bin:$PATH\" && cd /Users/ly.hkk/Desktop/Raksul/raksul-enterprise-bdd/robot && ENV={{ $json.env }} HEADLESS=true DEBUG_ESTIMATION_CATEGORY_ID={{ $json.category_id }} DEBUG_ESTIMATION_PRODUCT_IDS=\"{{ $json.product_ids }}\" ./robot.sh test_suites/directmail/ops/ops_debug_estimation_page.robot && cat /Users/ly.hkk/Downloads/debug_estimation_price_cost_qa5.csv"
-      },
-      "type": "n8n-nodes-base.ssh",
-      "typeVersion": 1,
-      "position": [
-        208,
-        0
+        480,
+        16
       ],
       "id": "70e8e5bd-6824-470c-a013-f05915d9b9fa",
       "name": "qa5",
@@ -87,13 +55,13 @@
     },
     {
       "parameters": {
-        "command": "=export PATH=\"/usr/local/bin:$PATH\" && cd /Users/ly.hkk/Desktop/Raksul/raksul-enterprise-bdd/robot && ENV={{ $('Master Data Form').item.json.original_env }} HEADLESS=true DEBUG_ESTIMATION_CATEGORY_ID={{ $('Master Data Form').item.json.category_id }} DEBUG_ESTIMATION_PRODUCT_IDS=\"{{ $('Master Data Form').item.json.product_ids }}\" ./robot.sh test_suites/directmail/ops/ops_debug_estimation_page.robot && cat /Users/ly.hkk/Downloads/debug_estimation_price_cost_qa2.csv"
+        "command": "=export PATH=\"/usr/local/bin:$PATH\" && cd /Users/ly.hkk/Desktop/Raksul/raksul-enterprise-bdd/robot && ENV={{ $('Split product ids').item.json.original_env}} HEADLESS=false DEBUG_ESTIMATION_CATEGORY_ID={{ $('Split product ids').item.json.category_id }} DEBUG_ESTIMATION_PRODUCT_IDS=\"{{ $('Split product ids').item.json.product_ids }}\" ./robot.sh test_suites/directmail/ops/ops_debug_estimation_page.robot && cat /Users/ly.hkk/Downloads/debug_estimation_price_cost_qa2.csv"
       },
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        432,
-        0
+        704,
+        16
       ],
       "id": "59ef2b4f-0b8b-48ef-ae5a-61a9dcf7a0eb",
       "name": "qa2",
@@ -103,6 +71,92 @@
           "name": "SSH Password account"
         }
       }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        528,
+        -176
+      ],
+      "id": "a55b37ed-8593-45c7-b5a5-a664ce74d668",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const COMPARE_COL = 'unit_cost_1';\nconst ID_COLS = ['product_id_1', 'product_name_1', 'mailing_method_name', 'day', 'min_quantity'];\n\nfunction parseCSV(content) {\n  const clean = content.replace(/^\\uFEFF/, '').replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n').trim();\n  const match = clean.match(/(product_id_1,[\\s\\S]*)/);\n  if (!match) return {};\n  const csvPart = match[1].trim();\n  const lines = csvPart.split('\\n').filter(l => l.trim());\n  const headers = lines[0].split(',').map(h => h.trim());\n  return lines.slice(1).map(line => {\n    const vals = line.split(',');\n    return Object.fromEntries(headers.map((h, i) => [h, (vals[i] || '').trim()]));\n  });\n}\n\nfunction rowKey(row) {\n  return ID_COLS.map(c => row[c] || '').join('|');\n}\n\nconst csv1 = $('qa2').item.json.stdout;\nconst csv2 = $('qa5').item.json.stdout;\nconst productId = $('Loop Over Items').item.json.product_ids;\nconst categoryId = $('Master Data Form').item.json.category_id;\n\nconst rows1 = parseCSV(csv1);\nconst rows2 = parseCSV(csv2);\n\nconst map1 = Object.fromEntries(rows1.map(r => [rowKey(r), r]));\nconst map2 = Object.fromEntries(rows2.map(r => [rowKey(r), r]));\nconst allKeys = [...new Set([...Object.keys(map1), ...Object.keys(map2)])];\n\nconst diffs = [];\nconst only1 = [];\nconst only2 = [];\n\nfor (const key of allKeys) {\n  const r1 = map1[key];\n  const r2 = map2[key];\n  if (r1 && !r2) { only1.push(r1); continue; }\n  if (r2 && !r1) { only2.push(r2); continue; }\n  const v1 = r1[COMPARE_COL] || '';\n  const v2 = r2[COMPARE_COL] || '';\n  if (v1 !== v2) {\n    const n1 = parseFloat(v1), n2 = parseFloat(v2);\n    const delta = (!isNaN(n1) && !isNaN(n2))\n      ? (() => { const d = Math.round((n2 - n1) * 10000) / 10000; return d > 0 ? `+${d}` : `${d}`; })()\n      : 'N/A';\n    diffs.push({\n      product_id: r1.product_id_1 || '',\n      day: r1.day || '',\n      min_qty: r1.min_quantity || '',\n      val1: v1, val2: v2, delta\n    });\n  }\n}\n\nreturn {\n  json: {\n    product_id: productId,\n    category_id: categoryId,\n    env1: $input.item.json.original_env,\n    env2: $input.item.json.env,\n    diffs,\n    only1_count: only1.length,\n    only2_count: only2.length,\n    total_rows: allKeys.length\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        16
+      ],
+      "id": "c846ddf2-c2e5-4de0-afe5-dd5de1638e5c",
+      "name": "Compare"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst raw = item.product_ids;\n\n// clean up the string \"[\\\"6\\\",\\\"7\\\"]\" → [\"6\",\"7\"]\nconst ids = raw.replace(/[\\[\\]\\s\"]/g, '').split(',').filter(s => s !== '');\n\nreturn ids.map(id => ({\n  json: { ...item, product_ids: id }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        0
+      ],
+      "id": "f97c3bea-a154-467d-80fe-a379a98a0404",
+      "name": "Split product ids"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        240,
+        0
+      ],
+      "id": "a09b3adc-8e01-4e88-b8f4-f2c61ea255d5",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "command": "=cat << 'HTMLEOF' > /Users/ly.hkk/Downloads/unit_cost_diff_report.html {{ $json.html }} HTMLEOF open /Users/ly.hkk/Downloads/unit_cost_diff_report.html"
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        944,
+        -176
+      ],
+      "id": "32dcd965-c8d6-46ea-a687-9d64e4c518dc",
+      "name": "Execute a command",
+      "credentials": {
+        "sshPassword": {
+          "id": "WHMZInEBa0LWjYy4",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Report Code node ───────────────────────────────────────────────────────\n// Mode: Run Once for All Items\n// Paste this into the Report Code node in n8n\n\nconst items = $input.all();\nconst allProducts = items[0].json.data && Array.isArray(items[0].json.data)\n  ? items[0].json.data\n  : items.map(i => i.json);\n\nconst ENV1 = (allProducts[0]?.env1 || 'ENV1').toUpperCase();\nconst ENV2 = (allProducts[0]?.env2 || 'ENV2').toUpperCase();\nconst CATEGORY_ID = allProducts[0]?.category_id || '?';\nconst productList = allProducts.map(p => p.product_id).filter(Boolean).join(', ');\n\nlet totalDiffs = 0;\nlet totalRows = 0;\nlet only1Total = 0;\nlet only2Total = 0;\nlet rowsHtml = '';\n\nfor (const product of allProducts) {\n  totalRows += product.total_rows || 0;\n  only1Total += product.only1_count || 0;\n  only2Total += product.only2_count || 0;\n  const diffs = product.diffs || [];\n  totalDiffs += diffs.length;\n\n  if (diffs.length > 0) {\n    rowsHtml += diffs.map(d => {\n      const dc = d.delta.startsWith('+') ? 'up' : 'down';\n      return `<tr>\n        <td>${d.product_id}</td>\n        <td class=\"jp\">${d.product_name}</td>\n        <td class=\"jp\">${d.mailing_method}</td>\n        <td>${d.day}</td>\n        <td>${d.min_qty}</td>\n        <td class=\"mono e1\">${d.val1}</td>\n        <td class=\"mono e2\">${d.val2}</td>\n        <td class=\"mono ${dc}\">${d.delta}</td>\n      </tr>`;\n    }).join('');\n  }\n}\n\nif (!rowsHtml) {\n  rowsHtml = '<tr><td colspan=\"8\" class=\"nodiff\">No differences in unit_cost_1 — all products identical</td></tr>';\n}\n\nconst now = new Date().toLocaleString('ja-JP');\nconst statClass = totalDiffs > 0 ? 'red' : 'green';\nconst missingHtml = [\n  only1Total ? `<p class=\"warn\">⚠ ${only1Total} rows only in ${ENV1}</p>` : '',\n  only2Total ? `<p class=\"warn\">⚠ ${only2Total} rows only in ${ENV2}</p>` : ''\n].join('');\n\nconst productSummaryRows = allProducts.map(p => `\n  <tr>\n    <td>${p.product_id || '-'}</td>\n    <td class=\"jp\">${(p.diffs && p.diffs[0]) ? p.diffs[0].product_name : '-'}</td>\n    <td>${p.total_rows || 0}</td>\n    <td class=\"${(p.diffs?.length || 0) > 0 ? 'red-text' : 'green-text'}\">${p.diffs?.length || 0}</td>\n  </tr>`).join('');\n\nconst html = `<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"UTF-8\">\n<title>unit_cost_1 diff · ${ENV1} vs ${ENV2}</title>\n<style>\n*{box-sizing:border-box;margin:0;padding:0}\nbody{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;font-size:14px}\n.hdr{background:#1a1a1a;color:#fff;padding:1.5rem 2rem}\n.hdr h1{font-size:1.15rem;font-weight:600;margin-bottom:.4rem}\n.meta{display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:.5rem}\n.meta-item{font-size:.8rem;color:#aaa}\n.meta-item span{color:#fff;font-weight:500}\n.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1.25rem 2rem}\n.stat{background:#fff;border-radius:8px;padding:1rem 1.25rem;border:1px solid #e5e5e5}\n.stat .num{font-size:1.75rem;font-weight:700}\n.stat .lbl{font-size:.72rem;color:#888;margin-top:.2rem}\n.red .num{color:#dc2626}.green .num{color:#16a34a}\n.red-text{color:#dc2626;font-weight:600}\n.green-text{color:#16a34a}\n.section{padding:0 2rem 1.5rem}\n.section-title{font-size:.7rem;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}\n.summary-table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e5e5;margin-bottom:1.5rem}\n.summary-table th{padding:.6rem 1rem;text-align:left;font-weight:600;font-size:.72rem;color:#555;border-bottom:1px solid #e5e5e5;background:#f9f9f9}\n.summary-table td{padding:.55rem 1rem;border-bottom:1px solid #f0f0f0;font-size:.85rem}\n.summary-table tr:last-child td{border-bottom:none}\n.summary-table tr:hover td{background:#fafafa}\n.wrap{padding:0 2rem 2rem}\n.warn{color:#b45309;background:#fef3c7;padding:.5rem 1rem;border-radius:6px;margin-bottom:.75rem;font-size:.8rem}\n.search{margin-bottom:.875rem}\n.search input{width:100%;padding:.5rem .875rem;border:1px solid #ddd;border-radius:6px;font-size:.875rem;outline:none}\n.search input:focus{border-color:#666}\ntable{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e5e5}\nthead{background:#f9f9f9}\nth{padding:.6rem .875rem;text-align:left;font-weight:600;font-size:.72rem;color:#555;border-bottom:1px solid #e5e5e5;white-space:nowrap}\ntd{padding:.5rem .875rem;border-bottom:1px solid #f0f0f0;vertical-align:middle}\ntr:last-child td{border-bottom:none}\ntr:hover td{background:#fafafa}\n.mono{font-family:monospace;font-size:.8rem}\n.up{color:#dc2626;font-weight:600}.down{color:#16a34a;font-weight:600}\n.jp{font-size:.78rem}\n.nodiff{text-align:center;padding:2rem;color:#16a34a;font-weight:500}\n.hidden{display:none}\n.e1{color:#1d4ed8}.e2{color:#166534}\n.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:600}\n.badge-e1{background:#dbeafe;color:#1d4ed8}\n.badge-e2{background:#dcfce7;color:#166534}\n</style></head><body>\n\n<div class=\"hdr\">\n  <h1>unit_cost_1 diff &nbsp;·&nbsp;\n    <span style=\"color:#60a5fa\">${ENV1}</span> vs\n    <span style=\"color:#4ade80\">${ENV2}</span>\n  </h1>\n  <div class=\"meta\">\n    <div class=\"meta-item\">Category: <span>${CATEGORY_ID}</span></div>\n    <div class=\"meta-item\">Products: <span>${productList}</span></div>\n    <div class=\"meta-item\">Generated: <span>${now}</span></div>\n  </div>\n</div>\n\n<div class=\"stats\">\n  <div class=\"stat\"><div class=\"num\">${allProducts.length}</div><div class=\"lbl\">Products compared</div></div>\n  <div class=\"stat\"><div class=\"num\">${totalRows}</div><div class=\"lbl\">Total rows</div></div>\n  <div class=\"stat ${statClass}\"><div class=\"num\">${totalDiffs}</div><div class=\"lbl\">Rows with diff</div></div>\n  <div class=\"stat\"><div class=\"num\">${only1Total + only2Total}</div><div class=\"lbl\">Rows missing</div></div>\n</div>\n\n<div class=\"section\">\n  <div class=\"section-title\">Per-product summary</div>\n  <table class=\"summary-table\">\n    <thead>\n      <tr>\n        <th>Product ID</th>\n        <th>Product name</th>\n        <th>Rows compared</th>\n        <th>Diffs found</th>\n      </tr>\n    </thead>\n    <tbody>${productSummaryRows}</tbody>\n  </table>\n</div>\n\n<div class=\"wrap\">\n  ${missingHtml}\n  <div class=\"section-title\" style=\"margin-bottom:.75rem\">Diff details</div>\n  <div class=\"search\"><input type=\"text\" id=\"s\" placeholder=\"Filter by product, method, value...\" oninput=\"filter()\"></div>\n  <table><thead><tr>\n    <th>Product ID</th><th>Product name</th><th>Mailing method</th><th>Day</th><th>Min qty</th>\n    <th><span class=\"badge badge-e1\">${ENV1}</span> unit_cost_1</th>\n    <th><span class=\"badge badge-e2\">${ENV2}</span> unit_cost_1</th>\n    <th>Delta</th>\n  </tr></thead>\n  <tbody id=\"tb\">${rowsHtml}</tbody></table>\n</div>\n\n<script>\nfunction filter(){const q=document.getElementById('s').value.toLowerCase();document.querySelectorAll('#tb tr').forEach(r=>r.classList.toggle('hidden',!r.textContent.toLowerCase().includes(q)));}\n</script>\n</body></html>`;\n\nreturn [{ json: { html, total_diffs: totalDiffs, total_rows: totalRows, products: productList, env1: ENV1, env2: ENV2, category_id: CATEGORY_ID } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -176
+      ],
+      "id": "cc2df4d7-0727-4600-8984-7dd79ca4aead",
+      "name": "Final Report"
     }
   ],
   "pinData": {},
@@ -111,18 +165,7 @@
       "main": [
         [
           {
-            "node": "qa5",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Code in JavaScript": {
-      "main": [
-        [
-          {
-            "node": "Execute a command",
+            "node": "Split product ids",
             "type": "main",
             "index": 0
           }
@@ -144,7 +187,69 @@
       "main": [
         [
           {
-            "node": "Code in JavaScript",
+            "node": "Compare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split product ids": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qa5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Report": {
+      "main": [
+        [
+          {
+            "node": "Execute a command",
             "type": "main",
             "index": 0
           }
@@ -157,7 +262,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "2b4c260b-8317-413a-8072-63a2387aee68",
+  "versionId": "d5361968-b70e-4616-a49e-a718483c25fa",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "f76bed500cdbb450be4e3b739027556dab4b8536ec4ff3b6079a6ef8bf05c2b7"
